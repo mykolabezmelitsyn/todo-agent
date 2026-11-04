@@ -44,6 +44,12 @@ app.get("/todos", async (_req, res) => {
 
 const port = Number(process.env.PORT ?? 3000);
 
+console.log("LangSmith configuration:", {
+    tracing: process.env.LANGSMITH_TRACING,
+    project: process.env.LANGSMITH_PROJECT,
+    hasApiKey: Boolean(process.env.LANGSMITH_API_KEY),
+});
+
 app.listen(port, () => {
     console.log(`To-Do Agent listening on http://localhost:${port}`);
 });

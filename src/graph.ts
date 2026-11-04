@@ -9,7 +9,12 @@ import { tools } from "./tools.js";
 //    and what arguments each one takes (taken from the Zod schemas).
 const model = new ChatOpenAI({
     model: process.env.OPENAI_MODEL ?? "gpt-6-luna",
+    useResponsesApi: true,
+    reasoning: {
+        effort: "low",
+    },
 }).bindTools(tools);
+
 
 const SYSTEM_PROMPT = `You are a helpful to-do list assistant.
 You manage the user's tasks ONLY through the tools you have.
