@@ -1,3 +1,4 @@
+import path from "node:path";
 import express from "express";
 import { HumanMessage } from "@langchain/core/messages";
 import { z } from "zod";
@@ -6,6 +7,10 @@ import { listTodos } from "./db.js";
 
 const app = express();
 app.use(express.json()); // parse JSON request bodies
+
+// Serve the chat page: files in the "public" folder are sent as-is,
+// so http://localhost:3000/ returns public/index.html.
+app.use(express.static(path.join(import.meta.dirname, "..", "public")));
 
 // Validate what clients send us, using Zod again.
 const ChatRequest = z.object({

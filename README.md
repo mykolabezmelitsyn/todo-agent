@@ -1,13 +1,13 @@
 # todo-agent
 
-A TypeScript to-do assistant built with LangGraph and the OpenAI API. Use natural language through a terminal chat or an HTTP API to create tasks, list all/open/completed tasks, mark tasks as done, and permanently delete tasks. Tasks are stored in PostgreSQL.
+A TypeScript to-do assistant built with LangGraph and the OpenAI API. Use natural language through a browser UI, terminal chat, or HTTP API to create tasks, list all/open/completed tasks, mark tasks as done, and permanently delete tasks. Tasks are stored in PostgreSQL. The browser UI includes a chat panel and a task list.
 
 ## How it works
 
-1. The terminal or HTTP entry point wraps the user's text in a `HumanMessage` and invokes the graph with a conversation ID.
+1. The browser sends messages to `POST /chat`. The terminal or HTTP entry point wraps the user's text in a `HumanMessage` and invokes the graph with a conversation ID.
 2. The graph sends the conversation and system instructions to `ChatOpenAI`, using the Responses API. The default model is `gpt-6-luna`, with reasoning effort set to `low`; `OPENAI_MODEL` can override the model.
 3. The model can request any of four tools. LangGraph's `ToolNode` executes them and returns their results to the model. This loop continues until the model replies without requesting tools.
-4. The final assistant text is printed in the terminal or returned as JSON over HTTP.
+4. The final assistant text is printed in the terminal or returned as JSON over HTTP. The browser displays the reply and refreshes its task list through `GET /todos`.
 
 | Tool | Behavior |
 | --- | --- |
@@ -64,6 +64,24 @@ The schema creates the `todos` table if it does not exist. The application does 
 ## Usage
 
 All run scripts load `.env` from the repository root and execute TypeScript directly with `tsx`; no build step is required.
+
+### Browser UI
+
+After completing Setup, start the server from the repository root:
+
+```sh
+npm start
+```
+
+Alternatively, use `npm run dev` to restart the server when server source files change. Open **http://localhost:3000/** in a modern browser, or use the port configured in `PORT`. Express serves both the API and `public/index.html`; no separate frontend installation, process, or build is needed. The page uses plain HTML, CSS, and JavaScript with no external assets.
+
+There is one page:
+
+- **Chat panel:** type a request and click **Send** or press **Enter**. Use **Shift+Enter** for a new line. The page shows “Thinking…” while waiting, then displays the reply or an error. Sending is disabled while a request is pending.
+- **Your tasks:** shows all tasks with numeric IDs; completed tasks are crossed out. The list loads when the page opens and refreshes after each chat request finishes. It has no edit buttons or status filters; request changes and filtered lists through chat. Changes from other clients appear on the next refresh, not in real time.
+- **New conversation:** clears the displayed messages and selects a new conversation ID. Saved tasks remain unchanged.
+
+The browser saves its conversation ID under `threadId` in `localStorage`. Reloading the page clears the visible transcript but reuses that ID, so the agent retains context while the same server process is running. If storage is blocked, each page load uses a new ID. Restarting the server loses conversation context even if the browser retains its ID. The UI requires browser support for `crypto.randomUUID()`; use localhost or HTTPS.
 
 ### Terminal chat
 
@@ -123,17 +141,33 @@ curl http://localhost:3000/todos
 
 `GET /todos` returns a JSON array containing `id`, `title`, `completed`, `created_at`, and `completed_at` for each task, ordered by ID. It returns `[]` when the table is empty.
 
+## How to use the agent
+
+The agent manages the shared to-do list from plain-language requests. Complete Setup, then run `npm start` and open **http://localhost:3000/** to chat in the browser, or run `npm run chat` for the terminal interface. The terminal interface runs independently and does not require the HTTP server.
+
+Ask it to add a task, show all/open/completed tasks, mark a task as done, or delete a task. You can identify existing tasks by name or numeric ID. If names are ambiguous, the agent is instructed to ask which task you mean. There is no required command syntax; `exit` is the terminal-only command for quitting.
+
+Example requests:
+
+- “Add a task to buy milk.”
+- “Show my open tasks.”
+- “Mark buy milk as done.”
+
+The agent replies with a confirmation or task list; exact wording varies. In the UI, check **Your tasks** for the saved result. Tasks are shared across conversations, and deletion is permanent with no required confirmation. The agent cannot edit titles, reopen completed tasks, schedule reminders, or manage due dates. Conversation context lasts only until its process exits; see Checks and limitations for other constraints.
+
 ## Project structure
 
 ```text
 src/
   chat.ts       Terminal chat entry point
-  server.ts     Express server: POST /chat and GET /todos
+  server.ts     Express server: static UI, POST /chat, and GET /todos
   graph.ts      Model configuration, system prompt, graph loop, and checkpointer
   state.ts      Conversation message state and append behavior
   tools.ts      Four model-callable task tools and their JSON results
   schemas.ts    Zod schemas for tool arguments
   db.ts         PostgreSQL connection pool and task queries
+public/
+  index.html    Browser chat and task list, including inline CSS and JavaScript
 sql/
   schema.sql    Initial todos table definition
 package.json    Dependencies and npm scripts
@@ -153,4 +187,4 @@ npm run typecheck
 - Tasks have no editing, reopening, due dates, priorities, reminders, or external task-service integration. Deletion has no undo or mandatory confirmation step.
 - Model choice and tool selection depend on the OpenAI service. Responses are not deterministic, and API access and database connectivity are required for task operations. There is no application-level retry or fallback policy.
 - The terminal does not catch graph errors. The server catches chat graph failures, but has no custom database-error response for `GET /todos` or graceful shutdown handler for its pool.
-- There is no browser interface, deployment configuration, or migration runner.
+- There is no deployment configuration or migration runner.
