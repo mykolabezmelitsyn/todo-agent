@@ -25,24 +25,67 @@ PostgreSQL persists task IDs, titles, completion flags, creation times, and comp
 Requirements:
 
 - Node.js 22 or newer, as required by the locked `@langchain/openai` dependency, and npm.
-- A running PostgreSQL database and the `psql` command-line client for schema setup.
+- PostgreSQL 14 or newer, running locally, and the `psql` command-line client. You need an administrator account to create a database and user.
 - An OpenAI API key with access to a model that supports tool calling through the Responses API and the configured reasoning settings.
+- Git and, for the Node.js selection commands below, an installed `nvm`.
 
-From the repository root, install dependencies:
+### Quick start
+
+1. Clone the repository and install dependencies:
 
 ```sh
-npm ci
+git clone https://github.com/mykolabezmelitsyn/todo-agent.git
+cd todo-agent
+nvm use 22
+npm install
+cp .env.example .env
 ```
 
-Create a `.env` file in the repository root. Replace the placeholder values below with your own configuration; `.env` is ignored by Git.
+If Node.js 22 is not installed in `nvm`, run `nvm install 22`, then repeat `nvm use 22`. The repository has no `.nvmrc`, so specify the version explicitly.
+
+2. Create the PostgreSQL user and database. Connect as a PostgreSQL administrator (replace `postgres` if your installation uses a different administrator role):
+
+```sh
+psql -U postgres -d postgres
+```
+
+Run these commands inside `psql`:
+
+```sql
+CREATE USER todo_user WITH PASSWORD 'todo_pass';
+CREATE DATABASE todo_agent OWNER todo_user;
+\q
+```
+
+These local development credentials match `.env.example`. If you choose different credentials, update `DATABASE_URL` and the schema command below to match. Administrator login methods depend on your PostgreSQL installation.
+
+3. Edit `.env`: replace `OPENAI_API_KEY=sk-your-key-here` with your API key and verify the database connection:
 
 ```dotenv
-OPENAI_API_KEY=<your-api-key>
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<database>
-# Optional overrides:
-OPENAI_MODEL=gpt-6-luna
-PORT=3000
+DATABASE_URL=postgres://todo_user:todo_pass@localhost:5432/todo_agent
 ```
+
+Keep `PORT=3000` for the URL below. The template also contains optional model and LangSmith tracing settings. `.env.example` is intended for version control; `.env` is ignored by Git and should contain your local values.
+
+4. From the repository root, create the task table as the application user:
+
+```sh
+psql -h localhost -p 5432 -U todo_user -d todo_agent -W -v ON_ERROR_STOP=1 -f sql/schema.sql
+```
+
+Enter the password you set for `todo_user` when prompted. The schema creates the `todos` table if it does not exist. The application does not create the database or apply the schema on startup.
+
+5. Start the server and UI:
+
+```sh
+npm run dev
+```
+
+Leave the process running and open **http://localhost:3000/**. Send “Add a task to buy milk.” and check that it appears in **Your tasks**. Both the browser UI and API use this server; no separate frontend process is needed. Press **Ctrl+C** to stop it.
+
+For interface details and more examples, see [Usage](#usage) and [How to use the agent](#how-to-use-the-agent).
+
+### Environment variables
 
 | Variable | Purpose |
 | --- | --- |
@@ -53,13 +96,7 @@ PORT=3000
 
 The server also logs the values of `LANGSMITH_TRACING` and `LANGSMITH_PROJECT` and whether `LANGSMITH_API_KEY` is present. They are optional LangChain tracing configuration; the application does not require them or implement a separate tracing setup.
 
-Create the PostgreSQL database beforehand, then apply the schema using the same connection string you configured in `.env`:
-
-```sh
-psql 'postgresql://<user>:<password>@<host>:<port>/<database>' -v ON_ERROR_STOP=1 -f sql/schema.sql
-```
-
-The schema creates the `todos` table if it does not exist. The application does not create the database or apply the schema on startup. Its database credentials need permission to read, insert, update, and delete tasks and use the ID sequence.
+The database credentials need permission to read, insert, update, and delete tasks and use the ID sequence. Applying the schema as `todo_user`, as shown above, gives that role ownership of the table and sequence.
 
 ## Usage
 
@@ -173,6 +210,7 @@ sql/
 package.json    Dependencies and npm scripts
 package-lock.json  Locked dependency versions
 tsconfig.json   Strict TypeScript configuration
+.env.example    Environment variable template; copy to .env and edit
 ```
 
 ## Checks and limitations
